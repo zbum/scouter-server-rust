@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::core::cache::CacheManager;
@@ -17,14 +18,26 @@ pub struct XLogCore {
 }
 
 impl XLogCore {
-    pub fn new(cache: Arc<CacheManager>, db: Arc<DbManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(cache, db, rx, token);
+        Self::start_worker(cache, db, rx, token, tasks);
         Self { tx }
     }
 
-    fn start_worker(cache: Arc<CacheManager>, db: Arc<DbManager>, mut rx: mpsc::Receiver<XLogPack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<XLogPack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
@@ -53,7 +66,9 @@ impl XLogCore {
 
         // Cache for real-time streaming
         let has_error = pack.error != 0;
-        cache.xlog.put(pack.obj_hash, pack.elapsed, has_error, bytes.clone());
+        cache
+            .xlog
+            .put(pack.obj_hash, pack.elapsed, has_error, bytes.clone());
 
         // Write to DB
         let time = if pack.end_time > 0 {
@@ -86,5 +101,63 @@ impl XLogCore {
         if self.tx.send(pack).await.is_err() {
             warn!("XLogCore queue overflow");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+    use std::fs;
+
+    #[tokio::test]
+    async fn shutdown_drains_queued_xlog_to_db() {
+        let test_id = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let db_dir = std::env::temp_dir().join(format!("scouter-xlog-drain-{test_id}"));
+
+        let mut config = Config::default();
+        config.db_dir = db_dir.to_string_lossy().into_owned();
+        let config = Arc::new(config);
+        let cache = Arc::new(CacheManager::new(&config));
+        let db = Arc::new(DbManager::new(config));
+        let shutdown = CancellationToken::new();
+        let tasks = TaskTracker::new();
+        let core = XLogCore::new(cache, db.clone(), 8, shutdown.clone(), &tasks);
+
+        let end_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        let txid = 0x1234_5678_i64;
+        core.add(XLogPack {
+            end_time,
+            txid,
+            ..XLogPack::default()
+        })
+        .await;
+
+        tasks.close();
+        shutdown.cancel();
+        tasks.wait().await;
+        db.flush_all().unwrap();
+
+        let date = date::yyyymmdd(end_time);
+        let stored = db
+            .get_or_create(&date)
+            .unwrap()
+            .xlog
+            .read_by_txid(txid)
+            .unwrap();
+        assert!(
+            stored.is_some(),
+            "queued XLog must be stored before shutdown"
+        );
+
+        drop(core);
+        drop(db);
+        fs::remove_dir_all(db_dir).unwrap();
     }
 }

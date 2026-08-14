@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::db::db_manager::DbManager;
@@ -45,14 +46,24 @@ pub struct ProfileCore {
 }
 
 impl ProfileCore {
-    pub fn new(db: Arc<DbManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(db, rx, token);
+        Self::start_worker(db, rx, token, tasks);
         Self { tx }
     }
 
-    fn start_worker(db: Arc<DbManager>, mut rx: mpsc::Receiver<ProfilePack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<ProfilePack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
@@ -83,8 +94,9 @@ impl ProfileCore {
 
         match db.get_or_create(&date_str) {
             Ok(container) => {
-                if let Err(e) =
-                    container.profile.write_with_length(pack.txid(), pack.profile_data())
+                if let Err(e) = container
+                    .profile
+                    .write_with_length(pack.txid(), pack.profile_data())
                 {
                     warn!("Failed to write profile to DB: {}", e);
                 }

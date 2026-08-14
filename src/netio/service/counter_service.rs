@@ -31,13 +31,8 @@ pub fn counter_real_time(
     };
 
     if let Some(value) = ctx.cache.counter.get(obj_hash, &counter, 1) {
-        let mut result = std::collections::HashMap::new();
-        result.insert("objHash".into(), Value::Decimal(obj_hash as i64));
-        result.insert("counter".into(), Value::Text(counter));
-        result.insert("value".into(), value);
-
         dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
-        dout.write_pack(&Pack::Map(MapPack { table: result }))?;
+        dout.write_value(&value)?;
     }
     Ok(())
 }
@@ -60,16 +55,33 @@ pub fn counter_real_time_all(
         _ => String::new(),
     };
 
-    let all = ctx.cache.counter.get_all_for_counter(&counter, 1);
-    for (obj_hash, value) in all {
-        let mut result = std::collections::HashMap::new();
-        result.insert("objHash".into(), Value::Decimal(obj_hash as i64));
-        result.insert("counter".into(), Value::Text(counter.clone()));
-        result.insert("value".into(), value);
+    let obj_type = match table.get("objType") {
+        Some(Value::Text(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let live_hashes: std::collections::HashSet<i32> = ctx
+        .cache
+        .object
+        .get_live_objects_by_type(&obj_type)
+        .into_iter()
+        .map(|object| object.obj_hash)
+        .collect();
 
-        dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
-        dout.write_pack(&Pack::Map(MapPack { table: result }))?;
+    let all = ctx.cache.counter.get_all_for_counter(&counter, 1);
+    let mut obj_hashes = Vec::new();
+    let mut values = Vec::new();
+    for (obj_hash, value) in all {
+        if obj_type.is_empty() || live_hashes.contains(&obj_hash) {
+            obj_hashes.push(Value::Decimal(obj_hash as i64));
+            values.push(value);
+        }
     }
+
+    let mut result = std::collections::HashMap::new();
+    result.insert("objHash".into(), Value::List(obj_hashes));
+    result.insert("value".into(), Value::List(values));
+    dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
+    dout.write_pack(&Pack::Map(MapPack { table: result }))?;
     Ok(())
 }
 
@@ -92,24 +104,46 @@ pub fn counter_real_time_multi(
     };
 
     let counters: Vec<String> = match table.get("counter") {
-        Some(Value::List(list)) => {
-            list.iter().filter_map(|v| match v {
+        Some(Value::List(list)) => list
+            .iter()
+            .filter_map(|v| match v {
                 Value::Text(s) => Some(s.clone()),
                 _ => None,
-            }).collect()
-        }
+            })
+            .collect(),
         _ => Vec::new(),
     };
 
-    let mut result = std::collections::HashMap::new();
-    result.insert("objHash".into(), Value::Decimal(obj_hash as i64));
+    let mut counter_values = Vec::new();
+    let mut values = Vec::new();
 
     for counter in &counters {
         if let Some(value) = ctx.cache.counter.get(obj_hash, counter, 1) {
-            result.insert(counter.clone(), value);
+            counter_values.push(Value::Text(counter.clone()));
+            values.push(value);
         }
     }
 
+    let mut result = std::collections::HashMap::new();
+    result.insert("counter".into(), Value::List(counter_values));
+    result.insert("value".into(), Value::List(values));
+
+    dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
+    dout.write_pack(&Pack::Map(MapPack { table: result }))?;
+    Ok(())
+}
+
+/// COUNTER_PAST_TIME: Return a valid empty history until realtime history persistence is added.
+pub fn counter_past_time(
+    _ctx: &ServiceContext,
+    din: &mut DataInputX<TcpReader>,
+    dout: &mut DataOutputX,
+    _login: bool,
+) -> Result<()> {
+    let _request = din.read_pack()?;
+    let mut result = std::collections::HashMap::new();
+    result.insert("time".into(), Value::List(Vec::new()));
+    result.insert("value".into(), Value::List(Vec::new()));
     dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
     dout.write_pack(&Pack::Map(MapPack { table: result }))?;
     Ok(())
@@ -296,10 +330,13 @@ pub fn counter_past_date_group(
         _ => String::new(),
     };
     let obj_hashes: Vec<i32> = match table.get("objHash") {
-        Some(Value::List(list)) => list.iter().filter_map(|v| match v {
-            Value::Decimal(d) => Some(*d as i32),
-            _ => None,
-        }).collect(),
+        Some(Value::List(list)) => list
+            .iter()
+            .filter_map(|v| match v {
+                Value::Decimal(d) => Some(*d as i32),
+                _ => None,
+            })
+            .collect(),
         _ => Vec::new(),
     };
 
@@ -329,10 +366,13 @@ pub fn counter_today_group(
         _ => String::new(),
     };
     let obj_hashes: Vec<i32> = match table.get("objHash") {
-        Some(Value::List(list)) => list.iter().filter_map(|v| match v {
-            Value::Decimal(d) => Some(*d as i32),
-            _ => None,
-        }).collect(),
+        Some(Value::List(list)) => list
+            .iter()
+            .filter_map(|v| match v {
+                Value::Decimal(d) => Some(*d as i32),
+                _ => None,
+            })
+            .collect(),
         _ => Vec::new(),
     };
     let today = date::yyyymmdd_today();

@@ -2,6 +2,8 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use dashmap::DashMap;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
 /// A logged-in user session.
@@ -36,7 +38,9 @@ impl LoginManager {
     /// Attempt to log in. Returns session token (0 = failure).
     pub fn login(&self, id: &str, _password: &str, ip: &str, internal: bool) -> i64 {
         // For now, accept all logins (account management is Phase 5+)
-        let session = self.session_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let session = self
+            .session_counter
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         let user = LoginUser {
             id: id.to_string(),
@@ -82,23 +86,28 @@ impl LoginManager {
 
     /// Get all active login users.
     pub fn get_login_user_list(&self) -> Vec<LoginUser> {
-        self.sessions.iter().map(|entry| entry.value().clone()).collect()
+        self.sessions
+            .iter()
+            .map(|entry| entry.value().clone())
+            .collect()
     }
 
     /// Start the background session cleaner.
-    pub fn start_cleaner(self: Arc<Self>) {
+    pub fn start_cleaner(self: Arc<Self>, shutdown: CancellationToken) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 let now = current_millis();
                 let ttl = self.default_ttl_ms;
-                self.sessions.retain(|_, user| {
-                    now - user.logintime < ttl
-                });
+                self.sessions.retain(|_, user| now - user.logintime < ttl);
                 debug!("Session cleaner: {} active sessions", self.sessions.len());
             }
-        });
+            debug!("Session cleaner stopped");
+        })
     }
 }
 

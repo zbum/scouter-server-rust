@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::core::alert_summary::AlertSummary;
@@ -18,14 +19,28 @@ pub struct AlertCore {
 }
 
 impl AlertCore {
-    pub fn new(cache: Arc<CacheManager>, db: Arc<DbManager>, queue_size: usize, token: CancellationToken, alert_summary: Arc<AlertSummary>) -> Self {
+    pub fn new(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        alert_summary: Arc<AlertSummary>,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(cache, db, rx, token, alert_summary);
+        Self::start_worker(cache, db, rx, token, alert_summary, tasks);
         Self { tx }
     }
 
-    fn start_worker(cache: Arc<CacheManager>, db: Arc<DbManager>, mut rx: mpsc::Receiver<AlertPack>, token: CancellationToken, alert_summary: Arc<AlertSummary>) {
-        tokio::spawn(async move {
+    fn start_worker(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<AlertPack>,
+        token: CancellationToken,
+        alert_summary: Arc<AlertSummary>,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {

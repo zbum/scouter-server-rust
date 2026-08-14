@@ -3,14 +3,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info};
 
 use crate::config::Config;
 use crate::db::alert_store::AlertStore;
 use crate::db::counter_store::CounterStore;
 use crate::db::profile_store::ProfileStore;
-use crate::db::text_store::TextStore;
 use crate::db::summary_store::SummaryStore;
+use crate::db::text_store::TextStore;
 use crate::db::xlog_store::XLogStore;
 
 /// A daily container holding all stores for a single YYYYMMDD date.
@@ -34,13 +36,22 @@ impl DailyContainer {
         self.last_access.lock().unwrap().elapsed()
     }
 
-    pub fn flush(&self) {
-        let _ = self.xlog.flush();
-        let _ = self.text.flush();
-        let _ = self.counter.flush();
-        let _ = self.alert.flush();
-        let _ = self.profile.flush();
-        let _ = self.summary.flush();
+    pub fn flush(&self) -> std::io::Result<()> {
+        let mut first_error = None;
+        for result in [
+            self.xlog.flush(),
+            self.text.flush(),
+            self.counter.flush(),
+            self.alert.flush(),
+            self.profile.flush(),
+            self.summary.flush(),
+        ] {
+            if let Err(error) = result {
+                first_error.get_or_insert(error);
+            }
+        }
+
+        first_error.map_or(Ok(()), Err)
     }
 }
 
@@ -122,38 +133,58 @@ impl DbManager {
         }
         for date in to_remove {
             if let Some((_, container)) = self.containers.remove(&date) {
-                container.flush();
-                info!("Closed idle daily container: {}", date);
+                match container.flush() {
+                    Ok(()) => info!("Closed idle daily container: {}", date),
+                    Err(error) => {
+                        tracing::error!("Failed to flush idle daily container {}: {}", date, error)
+                    }
+                }
             }
         }
     }
 
     /// Flush all containers.
-    pub fn flush_all(&self) {
+    pub fn flush_all(&self) -> std::io::Result<()> {
+        let mut first_error = None;
         for entry in self.containers.iter() {
-            entry.value().flush();
+            if let Err(error) = entry.value().flush() {
+                tracing::error!("Failed to flush daily container {}: {}", entry.key(), error);
+                first_error.get_or_insert(error);
+            }
         }
+        first_error.map_or(Ok(()), Err)
     }
 
     /// Start the background monitor that periodically flushes and closes idle containers.
-    pub fn start_monitor(self: Arc<Self>) {
+    pub fn start_monitor(self: Arc<Self>, shutdown: CancellationToken) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(60));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 // Flush all dirty data
-                self.flush_all();
+                if let Err(error) = self.flush_all() {
+                    tracing::error!("DB monitor flush failed: {}", error);
+                }
                 // Close containers idle for more than 30 minutes
                 self.close_idle(Duration::from_secs(30 * 60));
             }
-        });
+            if let Err(error) = self.flush_all() {
+                tracing::error!("Final DB monitor flush failed: {}", error);
+            }
+            info!("DB monitor stopped");
+        })
     }
 }
 
 impl Drop for DbManager {
     fn drop(&mut self) {
         for entry in self.containers.iter() {
-            entry.value().flush();
+            if let Err(error) = entry.value().flush() {
+                tracing::error!("DB flush during drop failed: {}", error);
+            }
         }
     }
 }

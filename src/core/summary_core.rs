@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::db::db_manager::DbManager;
@@ -16,14 +17,24 @@ pub struct SummaryCore {
 }
 
 impl SummaryCore {
-    pub fn new(db: Arc<DbManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(db, rx, token);
+        Self::start_worker(db, rx, token, tasks);
         Self { tx }
     }
 
-    fn start_worker(db: Arc<DbManager>, mut rx: mpsc::Receiver<SummaryPack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<SummaryPack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
@@ -54,9 +65,9 @@ impl SummaryCore {
                 // Each entry in the table is keyed by a hash string
                 for (key_str, value) in &pack.table.table {
                     // The key in the map is typically a hash value as string
-                    let id_hash: i32 = key_str.parse().unwrap_or_else(|_| {
-                        crate::util::hash::hash(key_str)
-                    });
+                    let id_hash: i32 = key_str
+                        .parse()
+                        .unwrap_or_else(|_| crate::util::hash::hash(key_str));
 
                     // Serialize the value as the record data
                     let mut dout = DataOutputX::new();
@@ -76,7 +87,11 @@ impl SummaryCore {
             }
         }
 
-        debug!("Summary processed: stype={} entries={}", pack.stype, pack.table.table.len());
+        debug!(
+            "Summary processed: stype={} entries={}",
+            pack.stype,
+            pack.table.table.len()
+        );
     }
 
     pub async fn add(&self, pack: SummaryPack) {

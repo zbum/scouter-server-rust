@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::info;
 
 use crate::config::Config;
@@ -71,14 +73,18 @@ impl AgentManager {
     }
 
     /// Start the background daemon that checks for inactive agents.
-    pub fn start_monitor(self: Arc<Self>) {
+    pub fn start_monitor(self: Arc<Self>, shutdown: CancellationToken) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(1));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 self.check_inactive();
             }
-        });
+            info!("Agent monitor stopped");
+        })
     }
 }
 

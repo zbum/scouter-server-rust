@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::core::cache::CacheManager;
@@ -14,14 +15,24 @@ pub struct StatusCore {
 }
 
 impl StatusCore {
-    pub fn new(cache: Arc<CacheManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        cache: Arc<CacheManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(cache, rx, token);
+        Self::start_worker(cache, rx, token, tasks);
         Self { tx }
     }
 
-    fn start_worker(cache: Arc<CacheManager>, mut rx: mpsc::Receiver<StatusPack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        cache: Arc<CacheManager>,
+        mut rx: mpsc::Receiver<StatusPack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
