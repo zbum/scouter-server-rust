@@ -10,7 +10,7 @@
 - [x] Counter, XLog, Profile, Text, Alert, Status, Summary, Object 기본 수집 경로 구성
 - [x] 날짜별 DB 컨테이너 및 기본 저장소 구성
 - [x] 기본 TCP 조회 핸들러 42개 등록
-- [x] 단위 테스트 34개 통과 (`cargo test`)
+- [x] 단위/통합 테스트 40개 통과 (`cargo test`)
 - [ ] Clippy 경고 없이 통과 (`cargo clippy --all-targets -- -D warnings`)
 - [ ] Java Scouter agent/client와 end-to-end 호환성 확인
 
@@ -36,11 +36,11 @@
 
 ### 2. 프로토콜 호환성 기준 테스트
 
-- [ ] 이식 대상 Java/Scala 서버 버전과 Git commit 기록
-- [ ] Java 구현에서 Pack 종류별 golden binary 생성
+- [x] 이식 대상 Java/Scala 서버 버전과 Git commit 기록
+- [ ] Java 구현에서 Pack 종류별 golden binary 생성 (TextPack 기준 fixture 완료)
 - [ ] Rust decoder가 golden binary를 동일한 값으로 읽는 테스트 추가
 - [ ] Rust encoder 결과를 Java decoder로 읽는 역방향 테스트 추가
-- [ ] Value 타입 전체의 Java/Rust round-trip 테스트 추가
+- [x] Value 타입 전체의 Java/Rust round-trip 테스트 추가
 - [ ] 잘린 패킷, 잘못된 길이, 알 수 없는 타입 테스트 추가
 - [ ] 큰 패킷과 최대 크기 경계 테스트 추가
 - [ ] 날짜, signed integer, UTF-8 문자열 경계값 테스트 추가

@@ -2,6 +2,7 @@
 
 Scouter Server 2.21.3의 핵심 수집 및 조회 경로를 Rust/Tokio로 이식하는 프로젝트다.
 개발 진행 상황과 남은 호환성 작업은 [TODO.md](TODO.md)에서 관리한다.
+프로토콜 기준 버전과 golden fixture 생성 방법은 [docs/protocol-compatibility.md](docs/protocol-compatibility.md)에 기록한다.
 
 ## 현재 확인된 동작
 
@@ -27,6 +28,13 @@ cargo clippy --all-targets -- -D warnings
 독립 배포 리소스로 포함하는 작업이 남아 있다.
 
 ## 변경 기록
+
+### 2026-08-14 — feature/protocol-compatibility-tests (1차 기준선)
+
+- Scouter 2.21.3 Java 구현으로 전체 Value 타입과 TextPack golden fixture를 생성했다.
+- Java golden decode와 Rust 재인코딩 byte equality 통합 테스트를 추가했다.
+- IPv4 Value와 숫자 배열의 Java wire format 불일치를 수정했다.
+- 음수/과대 길이와 잘린 blob을 할당 또는 panic 없이 거부하도록 decoder를 보강했다.
 
 ### 2026-08-14 — feature/server-lifecycle
 

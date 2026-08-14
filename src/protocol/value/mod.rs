@@ -23,6 +23,7 @@ pub const VALUE_ARRAY_FLOAT: u8 = 72;
 pub const VALUE_ARRAY_TEXT: u8 = 73;
 pub const VALUE_ARRAY_LONG: u8 = 74;
 pub const VALUE_MAP: u8 = 80;
+const MAX_COLLECTION_LENGTH: usize = u16::MAX as usize;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -172,11 +173,12 @@ impl Value {
                 Ok(Value::Blob(v))
             }
             VALUE_IP4ADDR => {
-                let v = din.read_blob().map_err(ScouterError::Io)?;
+                let mut v = vec![0; 4];
+                din.read_fully(&mut v).map_err(ScouterError::Io)?;
                 Ok(Value::Ip4(v))
             }
             VALUE_LIST => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_collection_length(din)?;
                 let mut list = Vec::with_capacity(count);
                 for _ in 0..count {
                     list.push(din.read_value()?);
@@ -184,15 +186,15 @@ impl Value {
                 Ok(Value::List(list))
             }
             VALUE_ARRAY_INT => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_array_length(din)?;
                 let mut arr = Vec::with_capacity(count);
                 for _ in 0..count {
-                    arr.push(din.read_decimal().map_err(ScouterError::Io)? as i32);
+                    arr.push(din.read_int().map_err(ScouterError::Io)?);
                 }
                 Ok(Value::IntArray(arr))
             }
             VALUE_ARRAY_FLOAT => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_array_length(din)?;
                 let mut arr = Vec::with_capacity(count);
                 for _ in 0..count {
                     arr.push(din.read_float().map_err(ScouterError::Io)?);
@@ -200,7 +202,7 @@ impl Value {
                 Ok(Value::FloatArray(arr))
             }
             VALUE_ARRAY_TEXT => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_array_length(din)?;
                 let mut arr = Vec::with_capacity(count);
                 for _ in 0..count {
                     arr.push(din.read_text().map_err(ScouterError::Io)?);
@@ -208,15 +210,15 @@ impl Value {
                 Ok(Value::TextArray(arr))
             }
             VALUE_ARRAY_LONG => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_array_length(din)?;
                 let mut arr = Vec::with_capacity(count);
                 for _ in 0..count {
-                    arr.push(din.read_decimal().map_err(ScouterError::Io)?);
+                    arr.push(din.read_long().map_err(ScouterError::Io)?);
                 }
                 Ok(Value::LongArray(arr))
             }
             VALUE_MAP => {
-                let count = din.read_decimal().map_err(ScouterError::Io)? as usize;
+                let count = read_collection_length(din)?;
                 let mut map = MapValue::new();
                 for _ in 0..count {
                     let key = din.read_text().map_err(ScouterError::Io)?;
@@ -251,38 +253,46 @@ impl Value {
             Value::Text(v) => { dout.write_text(v)?; }
             Value::TextHash(v) => { dout.write_int(*v)?; }
             Value::Blob(v) => { dout.write_blob(v)?; }
-            Value::Ip4(v) => { dout.write_blob(v)?; }
+            Value::Ip4(v) => {
+                if v.len() != 4 {
+                    return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                        format!("IPv4 value must contain exactly 4 bytes, got {}", v.len())));
+                }
+                dout.write_raw(v)?;
+            }
             Value::List(list) => {
+                validate_collection_length(list.len())?;
                 dout.write_decimal(list.len() as i64)?;
                 for v in list {
                     dout.write_value(v)?;
                 }
             }
             Value::IntArray(arr) => {
-                dout.write_decimal(arr.len() as i64)?;
+                write_array_length(dout, arr.len())?;
                 for v in arr {
-                    dout.write_decimal(*v as i64)?;
+                    dout.write_int(*v)?;
                 }
             }
             Value::FloatArray(arr) => {
-                dout.write_decimal(arr.len() as i64)?;
+                write_array_length(dout, arr.len())?;
                 for v in arr {
                     dout.write_float(*v)?;
                 }
             }
             Value::TextArray(arr) => {
-                dout.write_decimal(arr.len() as i64)?;
+                write_array_length(dout, arr.len())?;
                 for v in arr {
                     dout.write_text(v)?;
                 }
             }
             Value::LongArray(arr) => {
-                dout.write_decimal(arr.len() as i64)?;
+                write_array_length(dout, arr.len())?;
                 for v in arr {
-                    dout.write_decimal(*v)?;
+                    dout.write_long(*v)?;
                 }
             }
             Value::Map(map) => {
+                validate_collection_length(map.table.len())?;
                 dout.write_decimal(map.table.len() as i64)?;
                 for (key, value) in &map.table {
                     dout.write_text(key)?;
@@ -306,6 +316,37 @@ impl Value {
             _ => None,
         }
     }
+}
+
+fn read_array_length<R: std::io::Read>(din: &mut DataInputX<R>) -> Result<usize> {
+    let length = din.read_short().map_err(ScouterError::Io)?;
+    usize::try_from(length).map_err(|_| ScouterError::Io(io::Error::new(
+        io::ErrorKind::InvalidData, format!("negative array length {length}"))))
+}
+
+fn read_collection_length<R: std::io::Read>(din: &mut DataInputX<R>) -> Result<usize> {
+    let signed = din.read_decimal().map_err(ScouterError::Io)?;
+    let length = usize::try_from(signed).map_err(|_| ScouterError::Io(io::Error::new(
+        io::ErrorKind::InvalidData, format!("negative collection length {signed}"))))?;
+    if length > MAX_COLLECTION_LENGTH {
+        return Err(ScouterError::Io(io::Error::new(io::ErrorKind::InvalidData,
+            format!("collection length {length} exceeds {MAX_COLLECTION_LENGTH}"))));
+    }
+    Ok(length)
+}
+
+fn write_array_length(dout: &mut DataOutputX, length: usize) -> io::Result<()> {
+    let length = i16::try_from(length).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput,
+        format!("array length exceeds Java protocol maximum: {length}")))?;
+    dout.write_short(length as i32)
+}
+
+fn validate_collection_length(length: usize) -> io::Result<()> {
+    if length > MAX_COLLECTION_LENGTH {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput,
+            format!("collection length {length} exceeds {MAX_COLLECTION_LENGTH}")));
+    }
+    Ok(())
 }
 
 impl std::fmt::Display for Value {

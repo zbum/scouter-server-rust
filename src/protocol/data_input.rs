@@ -4,6 +4,9 @@ use crate::error::{ScouterError, Result};
 use crate::protocol::value::Value;
 use crate::protocol::pack::Pack;
 
+/// Maximum size of one length-prefixed field. Larger payloads use transport fragmentation.
+pub const MAX_BINARY_LENGTH: usize = 16 * 1024 * 1024;
+
 pub struct DataInputX<R: Read> {
     inner: R,
     offset: usize,
@@ -37,6 +40,10 @@ impl<R: Read> DataInputX<R> {
     }
 
     fn read_n(&mut self, len: usize) -> io::Result<Vec<u8>> {
+        if len > MAX_BINARY_LENGTH {
+            return Err(io::Error::new(io::ErrorKind::InvalidData,
+                format!("protocol field length {len} exceeds {MAX_BINARY_LENGTH}")));
+        }
         self.offset += len;
         let mut buf = vec![0u8; len];
         self.inner.read_exact(&mut buf)?;
@@ -149,7 +156,7 @@ impl<R: Read> DataInputX<R> {
                 self.read_n(len)
             }
             254 => {
-                let len = self.read_int()? as usize;
+                let len = checked_i32_length(self.read_int()?)?;
                 self.read_n(len)
             }
             n => self.read_n(n as usize),
@@ -163,7 +170,7 @@ impl<R: Read> DataInputX<R> {
     }
 
     pub fn read_int_bytes(&mut self) -> io::Result<Vec<u8>> {
-        let len = self.read_int()? as usize;
+        let len = checked_i32_length(self.read_int()?)?;
         self.read_n(len)
     }
 
@@ -189,6 +196,11 @@ impl<R: Read> DataInputX<R> {
         let mut buf = vec![0u8; n];
         self.inner.read_exact(&mut buf)
     }
+}
+
+fn checked_i32_length(len: i32) -> io::Result<usize> {
+    usize::try_from(len).map_err(|_| io::Error::new(io::ErrorKind::InvalidData,
+        format!("negative protocol field length {len}")))
 }
 
 // Static conversion helpers (matching Java DataInputX)
@@ -313,5 +325,22 @@ mod tests {
         out.write_text(text).unwrap();
         let mut inp = DataInputX::from_bytes(out.to_bytes());
         assert_eq!(inp.read_text().unwrap(), text);
+    }
+
+    #[test]
+    fn rejects_negative_and_oversized_blob_lengths() {
+        let mut negative = DataInputX::from_bytes(vec![254, 0xff, 0xff, 0xff, 0xff]);
+        assert_eq!(negative.read_blob().unwrap_err().kind(), io::ErrorKind::InvalidData);
+
+        let mut bytes = vec![254];
+        bytes.extend_from_slice(&(MAX_BINARY_LENGTH as i32 + 1).to_be_bytes());
+        let mut oversized = DataInputX::from_bytes(bytes);
+        assert_eq!(oversized.read_blob().unwrap_err().kind(), io::ErrorKind::InvalidData);
+    }
+
+    #[test]
+    fn truncated_blob_is_rejected() {
+        let mut input = DataInputX::from_bytes(vec![5, 1, 2]);
+        assert_eq!(input.read_blob().unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
 }
