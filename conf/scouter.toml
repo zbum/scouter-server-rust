@@ -1,0 +1,28 @@
+server_id = "SCOUTER-RUST"
+
+# Network settings
+net_udp_listen_ip = "0.0.0.0"
+net_udp_listen_port = 6100
+net_tcp_listen_ip = "0.0.0.0"
+net_tcp_listen_port = 6100
+net_http_port = 6180
+net_http_server_enabled = false
+net_udp_packet_buffer_size = 65535
+net_udp_worker_thread_count = 3
+
+# Directories
+db_dir = "./database"
+log_dir = "./logs"
+conf_dir = "./conf"
+
+# Queue sizes
+xlog_queue_size = 10000
+counter_queue_size = 10000
+text_queue_size = 10000
+
+# Debug logging (set to true to see detailed packet info)
+log_udp_packet = false
+log_udp_counter = false
+log_udp_xlog = false
+log_udp_object = false
+log_udp_text = false

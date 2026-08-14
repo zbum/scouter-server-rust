@@ -1,0 +1,116 @@
+/// Request command constants matching Java RequestCmd.java
+pub const CLOSE: &str = "CLOSE";
+pub const LOGIN: &str = "LOGIN";
+pub const CHECK_LOGIN: &str = "CHECK_LOGIN";
+pub const CHECK_SESSION: &str = "CHECK_SESSION";
+pub const GET_LOGIN_LIST: &str = "GET_LOGIN_LIST";
+
+// Object
+pub const OBJECT_INFO: &str = "OBJECT_INFO";
+pub const OBJECT_THREAD_LIST: &str = "OBJECT_THREAD_LIST";
+pub const OBJECT_ENV: &str = "OBJECT_ENV";
+pub const OBJECT_ACTIVE_SERVICE_LIST: &str = "OBJECT_ACTIVE_SERVICE_LIST";
+pub const OBJECT_ACTIVE_SERVICE_LIST_GROUP: &str = "OBJECT_ACTIVE_SERVICE_LIST_GROUP";
+pub const OBJECT_LIST_REAL_TIME: &str = "OBJECT_LIST_REAL_TIME";
+pub const OBJECT_LIST_LOAD_DATE: &str = "OBJECT_LIST_LOAD_DATE";
+pub const OBJECT_TODAY_FULL_LIST: &str = "OBJECT_TODAY_FULL_LIST";
+pub const OBJECT_REMOVE_INACTIVE: &str = "OBJECT_REMOVE_INACTIVE";
+pub const OBJECT_HEAPHISTO: &str = "OBJECT_HEAPHISTO";
+pub const OBJECT_THREAD_DUMP: &str = "OBJECT_THREAD_DUMP";
+pub const OBJECT_SYSTEM_GC: &str = "OBJECT_SYSTEM_GC";
+
+// Server
+pub const SERVER_VERSION: &str = "SERVER_VERSION";
+pub const SERVER_TIME: &str = "SERVER_TIME";
+pub const SERVER_STATUS: &str = "SERVER_STATUS";
+pub const SERVER_LOG_LIST: &str = "SERVER_LOG_LIST";
+pub const SERVER_THREAD_LIST: &str = "SERVER_THREAD_LIST";
+pub const SERVER_ENV: &str = "SERVER_ENV";
+pub const SERVER_DB_LIST: &str = "SERVER_DB_LIST";
+
+// Transaction / XLog
+pub const TRANX_REAL_TIME: &str = "TRANX_REAL_TIME";
+pub const TRANX_LOAD_TIME: &str = "TRANX_LOAD_TIME";
+pub const TRANX_PROFILE: &str = "TRANX_PROFILE";
+pub const TRANX_PROFILE_FULL: &str = "TRANX_PROFILE_FULL";
+pub const TRANX_REAL_TIME_GROUP: &str = "TRANX_REAL_TIME_GROUP";
+pub const TRANX_REAL_TIME_GROUP_LATEST: &str = "TRANX_REAL_TIME_GROUP_LATEST";
+pub const TRANX_LOAD_TIME_GROUP: &str = "TRANX_LOAD_TIME_GROUP";
+pub const TRANX_LOAD_TIME_GROUP_V2: &str = "TRANX_LOAD_TIME_GROUP_V2";
+pub const XLOG_READ_BY_TXID: &str = "XLOG_READ_BY_TXID";
+pub const XLOG_READ_BY_GXID: &str = "XLOG_READ_BY_GXID";
+pub const XLOG_LOAD_BY_TXIDS: &str = "XLOG_LOAD_BY_TXIDS";
+pub const XLOG_LOAD_BY_GXID: &str = "XLOG_LOAD_BY_GXID";
+pub const QUICKSEARCH_XLOG_LIST: &str = "QUICKSEARCH_XLOG_LIST";
+pub const SEARCH_XLOG_LIST: &str = "SEARCH_XLOG_LIST";
+
+// Counter
+pub const COUNTER_REAL_TIME: &str = "COUNTER_REAL_TIME";
+pub const COUNTER_REAL_TIME_ALL: &str = "COUNTER_REAL_TIME_ALL";
+pub const COUNTER_REAL_TIME_TOT: &str = "COUNTER_REAL_TIME_TOT";
+pub const COUNTER_REAL_TIME_OBJECT_ALL: &str = "COUNTER_REAL_TIME_OBJECT_ALL";
+pub const COUNTER_REAL_TIME_OBJECT_TYPE_ALL: &str = "COUNTER_REAL_TIME_OBJECT_TYPE_ALL";
+pub const COUNTER_REAL_TIME_MULTI: &str = "COUNTER_REAL_TIME_MULTI";
+pub const COUNTER_REAL_TIME_GROUP: &str = "COUNTER_REAL_TIME_GROUP";
+pub const COUNTER_REAL_TIME_ALL_MULTI: &str = "COUNTER_REAL_TIME_ALL_MULTI";
+pub const COUNTER_PAST_TIME: &str = "COUNTER_PAST_TIME";
+pub const COUNTER_PAST_TIME_ALL: &str = "COUNTER_PAST_TIME_ALL";
+pub const COUNTER_PAST_TIME_TOT: &str = "COUNTER_PAST_TIME_TOT";
+pub const COUNTER_PAST_TIME_GROUP: &str = "COUNTER_PAST_TIME_GROUP";
+pub const COUNTER_PAST_DATE: &str = "COUNTER_PAST_DATE";
+pub const COUNTER_PAST_DATE_ALL: &str = "COUNTER_PAST_DATE_ALL";
+pub const COUNTER_PAST_DATE_TOT: &str = "COUNTER_PAST_DATE_TOT";
+pub const COUNTER_TODAY: &str = "COUNTER_TODAY";
+pub const COUNTER_TODAY_ALL: &str = "COUNTER_TODAY_ALL";
+pub const COUNTER_MAP_REAL_TIME: &str = "COUNTER_MAP_REAL_TIME";
+pub const COUNTER_PAST_DATE_GROUP: &str = "COUNTER_PAST_DATE_GROUP";
+pub const COUNTER_TODAY_GROUP: &str = "COUNTER_TODAY_GROUP";
+
+// Alert
+pub const ALERT_REAL_TIME: &str = "ALERT_REAL_TIME";
+pub const ALERT_LOAD_TIME: &str = "ALERT_LOAD_TIME";
+
+// Text
+pub const GET_TEXT: &str = "GET_TEXT";
+pub const GET_TEXT_100: &str = "GET_TEXT_100";
+pub const GET_TEXT_PACK: &str = "GET_TEXT_PACK";
+
+// Status
+pub const STATUS_AROUND_VALUE: &str = "STATUS_AROUND_VALUE";
+
+// ActiveSpeed
+pub const ACTIVESPEED_REAL_TIME: &str = "ACTIVESPEED_REAL_TIME";
+pub const ACTIVESPEED_REAL_TIME_GROUP: &str = "ACTIVESPEED_REAL_TIME_GROUP";
+
+// Configure
+pub const GET_CONFIGURE_SERVER: &str = "GET_CONFIGURE_SERVER";
+pub const SET_CONFIGURE_SERVER: &str = "SET_CONFIGURE_SERVER";
+pub const LIST_CONFIGURE_SERVER: &str = "LIST_CONFIGURE_SERVER";
+pub const GET_CONFIGURE_WAS: &str = "GET_CONFIGURE_WAS";
+pub const SET_CONFIGURE_WAS: &str = "SET_CONFIGURE_WAS";
+
+// KV Store
+pub const GET_GLOBAL_KV: &str = "GET_GLOBAL_KV";
+pub const SET_GLOBAL_KV: &str = "SET_GLOBAL_KV";
+
+// Account
+pub const LIST_ACCOUNT: &str = "LIST_ACCOUNT";
+pub const ADD_ACCOUNT: &str = "ADD_ACCOUNT";
+pub const EDIT_ACCOUNT: &str = "EDIT_ACCOUNT";
+
+// Summary
+pub const LOAD_SERVICE_SUMMARY: &str = "LOAD_SERVICE_SUMMARY";
+pub const LOAD_SQL_SUMMARY: &str = "LOAD_SQL_SUMMARY";
+pub const LOAD_APICALL_SUMMARY: &str = "LOAD_APICALL_SUMMARY";
+
+// Visitor
+pub const VISITOR_REALTIME: &str = "VISITOR_REALTIME";
+pub const VISITOR_REALTIME_TOTAL: &str = "VISITOR_REALTIME_TOTAL";
+
+// Keep-alive (agent protocol)
+pub const KEEP_ALIVE: &str = "KEEP_ALIVE";
+
+/// Commands that don't require authentication
+pub fn is_free_cmd(cmd: &str) -> bool {
+    matches!(cmd, LOGIN | SERVER_VERSION | SERVER_TIME)
+}
