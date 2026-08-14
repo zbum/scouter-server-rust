@@ -2,14 +2,16 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::core::dispatcher::Dispatcher;
+use crate::netio::multi_packet::MultiPacketProcessor;
 use crate::protocol::data_input::DataInputX;
 use crate::protocol::net_cafe;
 use crate::protocol::pack::Pack;
-use crate::netio::multi_packet::MultiPacketProcessor;
 
 pub struct NetData {
     pub data: Vec<u8>,
@@ -31,21 +33,36 @@ impl NetDataProcessor {
         }
     }
 
-    pub fn start(self: Arc<Self>, mut rx: mpsc::Receiver<NetData>) {
+    pub fn start(
+        self: Arc<Self>,
+        mut rx: mpsc::Receiver<NetData>,
+        shutdown: CancellationToken,
+    ) -> JoinHandle<()> {
         let worker_count = self.config.net_udp_worker_thread_count;
         info!("Starting {} UDP data processor workers", worker_count);
 
         let processor = self.clone();
         tokio::spawn(async move {
-            while let Some(net_data) = rx.recv().await {
+            let mut packets = tokio::task::JoinSet::new();
+            loop {
+                let net_data = tokio::select! {
+                    _ = shutdown.cancelled() => {
+                        rx.close();
+                        rx.recv().await
+                    }
+                    net_data = rx.recv() => net_data,
+                };
+                let Some(net_data) = net_data else { break };
                 let proc = processor.clone();
-                tokio::spawn(async move {
+                packets.spawn(async move {
                     if let Err(e) = proc.process(net_data).await {
                         warn!("Error processing UDP packet: {}", e);
                     }
                 });
             }
-        });
+            while packets.join_next().await.is_some() {}
+            info!("UDP data processor drained and stopped");
+        })
     }
 
     async fn process(&self, p: NetData) -> crate::error::Result<()> {
@@ -63,7 +80,10 @@ impl NetDataProcessor {
                 self.process_cafe_mtu(&mut din, &p.addr).await?;
             }
             _ => {
-                warn!("Received unknown packet magic: {:#010x} from {}", cafe, p.addr);
+                warn!(
+                    "Received unknown packet magic: {:#010x} from {}",
+                    cafe, p.addr
+                );
             }
         }
         Ok(())
@@ -129,7 +149,10 @@ impl NetDataProcessor {
             }
             Pack::XLog(p) => {
                 if self.config.log_udp_xlog {
-                    debug!("XLOG: obj={:#x} svc={:#x} elapsed={}ms err={}", p.obj_hash, p.service, p.elapsed, p.error);
+                    debug!(
+                        "XLOG: obj={:#x} svc={:#x} elapsed={}ms err={}",
+                        p.obj_hash, p.service, p.elapsed, p.error
+                    );
                 }
             }
             Pack::XLogProfile(_) | Pack::XLogProfile2(_) => {
@@ -149,12 +172,18 @@ impl NetDataProcessor {
             }
             Pack::Alert(p) => {
                 if self.config.log_udp_alert {
-                    debug!("ALERT: level={} title={} msg={}", p.level, p.title, p.message);
+                    debug!(
+                        "ALERT: level={} title={} msg={}",
+                        p.level, p.title, p.message
+                    );
                 }
             }
             Pack::Object(p) => {
                 if self.config.log_udp_object {
-                    debug!("OBJECT: type={} name={} hash={:#x}", p.obj_type, p.obj_name, p.obj_hash);
+                    debug!(
+                        "OBJECT: type={} name={} hash={:#x}",
+                        p.obj_type, p.obj_name, p.obj_hash
+                    );
                 }
             }
             Pack::Status(_) => {

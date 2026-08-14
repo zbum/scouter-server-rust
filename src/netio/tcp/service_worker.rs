@@ -29,6 +29,14 @@ pub async fn handle_client(
         }
     };
 
+    if let Err(e) = std_stream.set_nonblocking(false) {
+        warn!(
+            "Failed to switch client socket to blocking mode for {}: {}",
+            addr, e
+        );
+        return;
+    }
+
     if let Err(e) = std_stream.set_read_timeout(Some(Duration::from_secs(60))) {
         warn!("Failed to set read timeout for {}: {}", addr, e);
         return;
@@ -37,13 +45,12 @@ pub async fn handle_client(
         debug!("Failed to set TCP_NODELAY for {}: {}", addr, e);
     }
 
-    let result = tokio::task::spawn_blocking(move || {
-        run_command_loop(std_stream, addr, &registry)
-    }).await;
+    let result =
+        tokio::task::spawn_blocking(move || run_command_loop(std_stream, addr, &registry)).await;
 
     match result {
         Ok(Ok(())) => info!("TCP client disconnected: {}", addr),
-        Ok(Err(e)) => debug!("TCP client {} error: {}", addr, e),
+        Ok(Err(e)) => warn!("TCP client {} error: {}", addr, e),
         Err(e) => warn!("TCP client {} task panicked: {}", addr, e),
     }
 }
@@ -97,7 +104,10 @@ fn run_command_loop(
         if !session_ok && !request_cmd::is_free_cmd(&cmd) {
             session_ok = registry.context.login_manager.ok_session(session);
             if !session_ok {
-                warn!("Invalid session from {}: cmd={} session={:#x}", addr, cmd, session);
+                warn!(
+                    "Invalid session from {}: cmd={} session={:#x}",
+                    addr, cmd, session
+                );
                 writer.write_all(&[tcp_flag::INVALID_SESSION])?;
                 writer.flush()?;
                 break;
@@ -108,7 +118,10 @@ fn run_command_loop(
 
         // Process command - handler reads remaining data from din (TCP stream)
         let mut dout = DataOutputX::new();
-        registry.process(&cmd, &mut din, &mut dout, session_ok);
+        if !registry.process(&cmd, &mut din, &mut dout, session_ok) {
+            warn!("Closing client {} after unsupported command {}", addr, cmd);
+            break;
+        }
 
         // Write response buffer
         let response = dout.to_bytes();

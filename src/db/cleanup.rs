@@ -2,6 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
 /// Background cleaner that deletes old YYYYMMDD directories.
@@ -9,17 +11,21 @@ pub struct Cleaner;
 
 impl Cleaner {
     /// Start a background task that periodically cleans up old data directories.
-    pub fn start(db_dir: String, keep_days: u32) {
+    pub fn start(db_dir: String, keep_days: u32, shutdown: CancellationToken) -> JoinHandle<()> {
         tokio::spawn(async move {
             // Run immediately on start, then every hour
             Self::cleanup_once(&db_dir, keep_days);
 
             let mut interval = tokio::time::interval(Duration::from_secs(3600));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
                 Self::cleanup_once(&db_dir, keep_days);
             }
-        });
+            info!("DB cleaner stopped");
+        })
     }
 
     fn cleanup_once(db_dir: &str, keep_days: u32) {

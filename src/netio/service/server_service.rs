@@ -8,6 +8,16 @@ use crate::protocol::pack::{MapPack, Pack};
 use crate::protocol::tcp_flag;
 use crate::protocol::value::Value;
 
+pub fn check_job(
+    _ctx: &ServiceContext,
+    din: &mut DataInputX<TcpReader>,
+    _dout: &mut DataOutputX,
+    _login: bool,
+) -> Result<()> {
+    let _request = din.read_pack()?;
+    Ok(())
+}
+
 pub fn server_version(
     ctx: &ServiceContext,
     _din: &mut DataInputX<TcpReader>,
@@ -15,8 +25,14 @@ pub fn server_version(
     _login: bool,
 ) -> Result<()> {
     let mut table = std::collections::HashMap::new();
-    table.insert("version".into(), Value::Text("Scouter Server Rust 0.1.0".into()));
-    table.insert("server_id".into(), Value::Text(ctx.config.server_id.clone()));
+    table.insert(
+        "version".into(),
+        Value::Text("Scouter Server Rust 0.1.0".into()),
+    );
+    table.insert(
+        "server_id".into(),
+        Value::Text(ctx.config.server_id.clone()),
+    );
 
     dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
     dout.write_pack(&Pack::Map(MapPack { table }))?;
@@ -49,8 +65,14 @@ pub fn server_status(
     _login: bool,
 ) -> Result<()> {
     let mut table = std::collections::HashMap::new();
-    table.insert("server_id".into(), Value::Text(ctx.config.server_id.clone()));
-    table.insert("obj_count".into(), Value::Decimal(ctx.cache.object.size() as i64));
+    table.insert(
+        "server_id".into(),
+        Value::Text(ctx.config.server_id.clone()),
+    );
+    table.insert(
+        "obj_count".into(),
+        Value::Decimal(ctx.cache.object.size() as i64),
+    );
 
     dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
     dout.write_pack(&Pack::Map(MapPack { table }))?;
@@ -100,10 +122,19 @@ pub fn server_env(
 ) -> Result<()> {
     let mut table = std::collections::HashMap::new();
     table.insert("os".into(), Value::Text(std::env::consts::OS.to_string()));
-    table.insert("arch".into(), Value::Text(std::env::consts::ARCH.to_string()));
-    table.insert("server_id".into(), Value::Text(ctx.config.server_id.clone()));
+    table.insert(
+        "arch".into(),
+        Value::Text(std::env::consts::ARCH.to_string()),
+    );
+    table.insert(
+        "server_id".into(),
+        Value::Text(ctx.config.server_id.clone()),
+    );
     table.insert("db_dir".into(), Value::Text(ctx.config.db_dir.clone()));
-    table.insert("version".into(), Value::Text("Scouter Server Rust 0.1.0".into()));
+    table.insert(
+        "version".into(),
+        Value::Text("Scouter Server Rust 0.1.0".into()),
+    );
 
     dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
     dout.write_pack(&Pack::Map(MapPack { table }))?;

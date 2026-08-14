@@ -3,7 +3,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use dashmap::DashMap;
-use tracing::debug;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
+use tracing::{debug, info};
 
 use crate::netio::tcp::agent_worker::TcpAgentWorker;
 
@@ -64,13 +66,16 @@ impl TcpAgentManager {
     }
 
     /// Start the background monitor that sends keepalives and cleans up dead connections.
-    pub fn start_monitor(self: Arc<Self>) {
+    pub fn start_monitor(self: Arc<Self>, shutdown: CancellationToken) -> JoinHandle<()> {
         let keepalive_interval = self.keepalive_interval;
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(5));
             loop {
-                interval.tick().await;
+                tokio::select! {
+                    _ = shutdown.cancelled() => break,
+                    _ = interval.tick() => {}
+                }
 
                 // Collect obj_hashes to check
                 let hashes: Vec<i32> = self.agents.iter().map(|e| *e.key()).collect();
@@ -87,7 +92,10 @@ impl TcpAgentManager {
                                 let w = worker.clone();
                                 tokio::spawn(async move {
                                     if let Err(e) = w.send_keep_alive().await {
-                                        debug!("Keepalive failed for agent {:#x}: {}", w.obj_hash, e);
+                                        debug!(
+                                            "Keepalive failed for agent {:#x}: {}",
+                                            w.obj_hash, e
+                                        );
                                         w.close();
                                     }
                                 });
@@ -102,7 +110,12 @@ impl TcpAgentManager {
                     }
                 }
             }
-        });
+            let hashes: Vec<i32> = self.agents.iter().map(|entry| *entry.key()).collect();
+            for hash in hashes {
+                self.remove(hash);
+            }
+            info!("TCP agent monitor stopped");
+        })
     }
 
     /// Total number of agent connections.

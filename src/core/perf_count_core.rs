@@ -3,11 +3,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::core::cache::CacheManager;
-use crate::db::db_manager::DbManager;
 use crate::db::counter_store::TIME_TYPE_FIVE_MIN;
+use crate::db::db_manager::DbManager;
 use crate::protocol::pack::PerfCounterPack;
 use crate::protocol::value::Value;
 use crate::util::date;
@@ -18,14 +19,26 @@ pub struct PerfCountCore {
 }
 
 impl PerfCountCore {
-    pub fn new(cache: Arc<CacheManager>, db: Arc<DbManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(cache, db, rx, token);
+        Self::start_worker(cache, db, rx, token, tasks);
         Self { tx }
     }
 
-    fn start_worker(cache: Arc<CacheManager>, db: Arc<DbManager>, mut rx: mpsc::Receiver<PerfCounterPack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<PerfCounterPack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
@@ -48,7 +61,9 @@ impl PerfCountCore {
 
         // Store each counter value in cache
         for (name, value) in &pack.data.table {
-            cache.counter.put(obj_hash, name, pack.timetype, value.clone());
+            cache
+                .counter
+                .put(obj_hash, name, pack.timetype, value.clone());
         }
 
         // Write to DB (only for 5-minute aggregated counters, matching Java behavior)
@@ -80,12 +95,8 @@ impl PerfCountCore {
                         key.extend_from_slice(&obj_hash.to_be_bytes());
                         key.extend_from_slice(&name_hash.to_be_bytes());
 
-                        if let Err(e) = container.counter.write(
-                            &key,
-                            hhmm,
-                            f_value,
-                            pack.timetype,
-                        ) {
+                        if let Err(e) = container.counter.write(&key, hhmm, f_value, pack.timetype)
+                        {
                             warn!("Failed to write counter to DB: {}", e);
                         }
                     }

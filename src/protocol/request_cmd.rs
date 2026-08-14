@@ -27,6 +27,7 @@ pub const SERVER_LOG_LIST: &str = "SERVER_LOG_LIST";
 pub const SERVER_THREAD_LIST: &str = "SERVER_THREAD_LIST";
 pub const SERVER_ENV: &str = "SERVER_ENV";
 pub const SERVER_DB_LIST: &str = "SERVER_DB_LIST";
+pub const CHECK_JOB: &str = "CHECK_JOB";
 
 // Transaction / XLog
 pub const TRANX_REAL_TIME: &str = "TRANX_REAL_TIME";
@@ -88,6 +89,7 @@ pub const SET_CONFIGURE_SERVER: &str = "SET_CONFIGURE_SERVER";
 pub const LIST_CONFIGURE_SERVER: &str = "LIST_CONFIGURE_SERVER";
 pub const GET_CONFIGURE_WAS: &str = "GET_CONFIGURE_WAS";
 pub const SET_CONFIGURE_WAS: &str = "SET_CONFIGURE_WAS";
+pub const GET_XML_COUNTER: &str = "GET_XML_COUNTER";
 
 // KV Store
 pub const GET_GLOBAL_KV: &str = "GET_GLOBAL_KV";

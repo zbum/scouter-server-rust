@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
+use tokio_util::task::TaskTracker;
 use tracing::{debug, info, warn};
 
 use crate::core::cache::CacheManager;
@@ -17,15 +18,27 @@ pub struct TextCore {
 }
 
 impl TextCore {
-    pub fn new(cache: Arc<CacheManager>, db: Arc<DbManager>, queue_size: usize, token: CancellationToken) -> Self {
+    pub fn new(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        queue_size: usize,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) -> Self {
         let cache_clone = cache.clone();
         let (tx, rx) = mpsc::channel(queue_size);
-        Self::start_worker(cache_clone, db, rx, token);
+        Self::start_worker(cache_clone, db, rx, token, tasks);
         Self { tx, cache }
     }
 
-    fn start_worker(cache: Arc<CacheManager>, db: Arc<DbManager>, mut rx: mpsc::Receiver<TextPack>, token: CancellationToken) {
-        tokio::spawn(async move {
+    fn start_worker(
+        cache: Arc<CacheManager>,
+        db: Arc<DbManager>,
+        mut rx: mpsc::Receiver<TextPack>,
+        token: CancellationToken,
+        tasks: &TaskTracker,
+    ) {
+        tasks.spawn(async move {
             loop {
                 tokio::select! {
                     Some(pack) = rx.recv() => {
@@ -51,7 +64,11 @@ impl TextCore {
                 "Text cached: type={} hash={:#x} text={}",
                 pack.xtype,
                 pack.hash,
-                if pack.text.len() > 80 { &pack.text[..80] } else { &pack.text }
+                if pack.text.len() > 80 {
+                    &pack.text[..80]
+                } else {
+                    &pack.text
+                }
             );
         }
 

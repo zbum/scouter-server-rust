@@ -16,17 +16,8 @@ pub fn object_list_real_time(
     let objects = ctx.cache.object.get_all_objects();
 
     for obj in objects {
-        let mut table = std::collections::HashMap::new();
-        table.insert("objHash".into(), Value::Decimal(obj.obj_hash as i64));
-        table.insert("objName".into(), Value::Text(obj.obj_name.clone()));
-        table.insert("objType".into(), Value::Text(obj.obj_type.clone()));
-        table.insert("address".into(), Value::Text(obj.address.clone()));
-        table.insert("alive".into(), Value::Boolean(obj.alive));
-        table.insert("wakeup".into(), Value::Decimal(obj.wakeup));
-        table.insert("version".into(), Value::Text(obj.version.clone()));
-
         dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
-        dout.write_pack(&Pack::Map(MapPack { table }))?;
+        dout.write_pack(&Pack::Object(obj))?;
     }
     Ok(())
 }
@@ -43,17 +34,8 @@ pub fn object_list_load_date(
     let objects = ctx.cache.object.get_all_objects();
 
     for obj in objects {
-        let mut table = std::collections::HashMap::new();
-        table.insert("objHash".into(), Value::Decimal(obj.obj_hash as i64));
-        table.insert("objName".into(), Value::Text(obj.obj_name.clone()));
-        table.insert("objType".into(), Value::Text(obj.obj_type.clone()));
-        table.insert("address".into(), Value::Text(obj.address.clone()));
-        table.insert("alive".into(), Value::Boolean(obj.alive));
-        table.insert("wakeup".into(), Value::Decimal(obj.wakeup));
-        table.insert("version".into(), Value::Text(obj.version.clone()));
-
         dout.write_byte(tcp_flag::HAS_NEXT as i32)?;
-        dout.write_pack(&Pack::Map(MapPack { table }))?;
+        dout.write_pack(&Pack::Object(obj))?;
     }
     Ok(())
 }
@@ -67,12 +49,10 @@ pub fn object_info(
 ) -> Result<()> {
     let pack = din.read_pack()?;
     let obj_hash = match pack {
-        Pack::Map(ref m) => {
-            match m.table.get("objHash") {
-                Some(Value::Decimal(v)) => *v as i32,
-                _ => 0,
-            }
-        }
+        Pack::Map(ref m) => match m.table.get("objHash") {
+            Some(Value::Decimal(v)) => *v as i32,
+            _ => 0,
+        },
         _ => 0,
     };
 

@@ -10,7 +10,7 @@
 - [x] Counter, XLog, Profile, Text, Alert, Status, Summary, Object 기본 수집 경로 구성
 - [x] 날짜별 DB 컨테이너 및 기본 저장소 구성
 - [x] 기본 TCP 조회 핸들러 42개 등록
-- [x] 단위 테스트 32개 통과 (`cargo test`)
+- [x] 단위 테스트 34개 통과 (`cargo test`)
 - [ ] Clippy 경고 없이 통과 (`cargo clippy --all-targets -- -D warnings`)
 - [ ] Java Scouter agent/client와 end-to-end 호환성 확인
 
@@ -21,12 +21,12 @@
 
 ### 1. 서버 생명주기와 종료 처리
 
-- [ ] HTTP가 비활성화되어도 UDP/TCP 서버가 종료되지 않도록 수정
-- [ ] UDP, TCP, HTTP task의 비정상 종료 정책 정의
-- [ ] 모든 background worker에 `CancellationToken` 연결
-- [ ] 종료 시 고정 sleep 대신 queue drain 완료를 확인
-- [ ] DB flush 및 worker 종료 결과를 확인하고 오류를 기록
-- [ ] 서버 생명주기 통합 테스트 추가
+- [x] HTTP가 비활성화되어도 UDP/TCP 서버가 종료되지 않도록 수정
+- [x] UDP, TCP, HTTP task의 비정상 종료 정책 정의
+- [x] 모든 background worker에 `CancellationToken` 연결
+- [x] 종료 시 고정 sleep 대신 queue drain 완료를 확인
+- [x] DB flush 및 worker 종료 결과를 확인하고 오류를 기록
+- [x] 서버 생명주기 통합 테스트 추가
 
 완료 조건:
 
@@ -312,3 +312,7 @@
 | 날짜 | 작업 | 검증 |
 |---|---|---|
 | 2026-08-14 | 초기 TODO와 기준선 작성 | `cargo test`: 32 passed |
+| 2026-08-14 | 서버 listener/monitor/core worker 종료 추적, queue drain 및 DB flush 오류 처리 | `cargo test`: 33 passed, 기본 설정 listen 및 `Ctrl-C` 무지연 종료 확인 |
+| 2026-08-14 | 실제 Client 로그인 중 즉시 reset 원인 수정: TCP client 소켓을 blocking mode로 전환 | Client 로그인 성공 |
+| 2026-08-14 | Client 초기화 호환: counter XML, CHECK_JOB framing, ObjectPack 응답 구현 | Host Agent Object 표시 성공 |
+| 2026-08-14 | CPU 차트 호환: COUNTER_REAL_TIME 응답을 Value로 수정, COUNTER_PAST_TIME 빈 이력 응답 추가 | Host CPU 실시간 차트 표시 성공 |

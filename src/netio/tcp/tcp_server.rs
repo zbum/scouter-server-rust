@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use tokio::io::AsyncReadExt;
 use tokio::net::TcpListener;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use crate::config::Config;
@@ -16,13 +17,25 @@ pub async fn start_tcp_server(
     config: Arc<Config>,
     registry: Arc<HandlerRegistry>,
     agent_manager: Arc<TcpAgentManager>,
+    shutdown: CancellationToken,
 ) -> anyhow::Result<()> {
-    let addr = format!("{}:{}", config.net_tcp_listen_ip, config.net_tcp_listen_port);
+    let addr = format!(
+        "{}:{}",
+        config.net_tcp_listen_ip, config.net_tcp_listen_port
+    );
     let listener = TcpListener::bind(&addr).await?;
     info!("TCP server listening on {}", addr);
 
     loop {
-        match listener.accept().await {
+        let accepted = tokio::select! {
+            _ = shutdown.cancelled() => {
+                info!("TCP server stopping");
+                break;
+            }
+            accepted = listener.accept() => accepted,
+        };
+
+        match accepted {
             Ok((stream, addr)) => {
                 let registry = registry.clone();
                 let agent_mgr = agent_manager.clone();
@@ -55,7 +68,10 @@ pub async fn start_tcp_server(
                                 write_half,
                             ));
                             let count = agent_mgr.add(obj_hash, worker);
-                            info!("TCP agent V1 connected: {:#x} from {} (pool={})", obj_hash, addr, count);
+                            info!(
+                                "TCP agent V1 connected: {:#x} from {} (pool={})",
+                                obj_hash, addr, count
+                            );
                         }
                         net_cafe::TCP_AGENT_V2 => {
                             // V2 agent connection (length-prefixed)
@@ -72,7 +88,10 @@ pub async fn start_tcp_server(
                                 write_half,
                             ));
                             let count = agent_mgr.add(obj_hash, worker);
-                            info!("TCP agent V2 connected: {:#x} from {} (pool={})", obj_hash, addr, count);
+                            info!(
+                                "TCP agent V2 connected: {:#x} from {} (pool={})",
+                                obj_hash, addr, count
+                            );
                         }
                         net_cafe::TCP_CLIENT => {
                             // Reassemble TcpStream from the split halves
@@ -90,4 +109,6 @@ pub async fn start_tcp_server(
             }
         }
     }
+
+    Ok(())
 }
